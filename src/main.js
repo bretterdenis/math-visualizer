@@ -1,3 +1,5 @@
+import { linspace, safeEval } from "./plot-math.js";
+
 const { invoke } = window.__TAURI__.core;
 
 const logEl = document.getElementById("log");
@@ -36,22 +38,6 @@ function addMessage(role, text) {
 function setBusy(busy) {
   inputEl.disabled = busy;
   formEl.querySelector("button").disabled = busy;
-}
-
-function linspace(min, max, n) {
-  const out = new Array(n);
-  const step = (max - min) / (n - 1);
-  for (let i = 0; i < n; i++) out[i] = min + step * i;
-  return out;
-}
-
-function safeEval(expr, scope) {
-  try {
-    const v = math.evaluate(expr, scope);
-    return typeof v === "number" && Number.isFinite(v) ? v : NaN;
-  } catch {
-    return NaN;
-  }
 }
 
 function renderPlot(spec) {

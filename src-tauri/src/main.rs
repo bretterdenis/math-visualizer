@@ -137,28 +137,36 @@ fn list_topics(state: State<AppState>) -> Vec<Topic> {
     state.library.lock().unwrap().topics.clone()
 }
 
+fn library_path_or_err() -> Result<PathBuf, String> {
+    library::default_library_path().ok_or_else(|| "Could not resolve config directory".to_string())
+}
+
 #[tauri::command]
 fn save_function(state: State<AppState>, topic: String, entry: FunctionEntry) -> Result<(), String> {
+    let path = library_path_or_err()?;
     let mut lib = state.library.lock().unwrap();
-    library::save_function(&mut lib, topic, entry)
+    library::save_function(&mut lib, topic, entry, &path)
 }
 
 #[tauri::command]
 fn move_function(state: State<AppState>, id: String, new_topic: String) -> Result<(), String> {
+    let path = library_path_or_err()?;
     let mut lib = state.library.lock().unwrap();
-    library::move_function(&mut lib, id, new_topic)
+    library::move_function(&mut lib, id, new_topic, &path)
 }
 
 #[tauri::command]
 fn delete_function(state: State<AppState>, id: String) -> Result<(), String> {
+    let path = library_path_or_err()?;
     let mut lib = state.library.lock().unwrap();
-    library::delete_function(&mut lib, id)
+    library::delete_function(&mut lib, id, &path)
 }
 
 #[tauri::command]
 fn rename_topic(state: State<AppState>, old_name: String, new_name: String) -> Result<(), String> {
+    let path = library_path_or_err()?;
     let mut lib = state.library.lock().unwrap();
-    library::rename_topic(&mut lib, old_name, new_name)
+    library::rename_topic(&mut lib, old_name, new_name, &path)
 }
 
 fn main() {

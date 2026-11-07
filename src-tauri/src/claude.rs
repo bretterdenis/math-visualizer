@@ -109,6 +109,17 @@ pub async fn ask(
     api_key: &str,
     history: &[ChatMessage],
 ) -> Result<ClaudeReply, String> {
+    ask_at(client, API_URL, api_key, history).await
+}
+
+/// Same as [`ask`] but against an arbitrary API URL — lets tests point at a mock server
+/// instead of the real Anthropic API.
+pub async fn ask_at(
+    client: &reqwest::Client,
+    api_url: &str,
+    api_key: &str,
+    history: &[ChatMessage],
+) -> Result<ClaudeReply, String> {
     let body = json!({
         "model": MODEL,
         "max_tokens": 1024,
@@ -118,7 +129,7 @@ pub async fn ask(
     });
 
     let resp = client
-        .post(API_URL)
+        .post(api_url)
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
@@ -168,4 +179,127 @@ pub async fn ask(
     } else {
         text
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// Spins up a mock Anthropic API server and returns it together with a plain
+    /// `reqwest::Client`. Point `ask_at` (or any future test) at `server.uri()`. Reused by any
+    /// future test that needs to mock the Claude API — just call this, register a `Mock` on
+    /// the returned server, and call `ask_at`.
+    async fn mock_server() -> (MockServer, reqwest::Client) {
+        let server = MockServer::start().await;
+        (server, reqwest::Client::new())
+    }
+
+    fn history() -> Vec<ChatMessage> {
+        vec![ChatMessage {
+            role: "user".to_string(),
+            content: json!("plot sin(x)"),
+        }]
+    }
+
+    #[tokio::test]
+    async fn ask_at_parses_tool_use_block_as_plot() {
+        let (server, client) = mock_server().await;
+        let body = json!({
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "render_plot",
+                    "input": {
+                        "kind": "2d",
+                        "title": "Sine",
+                        "subtitle": "f(x) = \\sin(x)",
+                        "description": "A sine wave.",
+                        "suggested_topic": "Trigonometric functions",
+                        "variables": ["x"],
+                        "domain": { "xMin": -10, "xMax": 10 },
+                        "traces": [{ "expr": "sin(x)" }]
+                    }
+                }
+            ]
+        });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let reply = ask_at(&client, &url, "test-key", &history()).await.unwrap();
+
+        match reply {
+            ClaudeReply::Plot(data) => {
+                assert_eq!(data["title"], "Sine");
+                assert_eq!(data["suggested_topic"], "Trigonometric functions");
+            }
+            ClaudeReply::Text(_) => panic!("expected a Plot reply"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ask_at_parses_plain_text_block_as_text() {
+        let (server, client) = mock_server().await;
+        let body = json!({
+            "content": [
+                { "type": "text", "text": "What function would you like to plot?" }
+            ]
+        });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let reply = ask_at(&client, &url, "test-key", &history()).await.unwrap();
+
+        match reply {
+            ClaudeReply::Text(text) => assert_eq!(text, "What function would you like to plot?"),
+            ClaudeReply::Plot(_) => panic!("expected a Text reply"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ask_at_empty_text_falls_back_to_placeholder() {
+        let (server, client) = mock_server().await;
+        let body = json!({ "content": [] });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let reply = ask_at(&client, &url, "test-key", &history()).await.unwrap();
+
+        match reply {
+            ClaudeReply::Text(text) => assert_eq!(text, "(no response)"),
+            ClaudeReply::Plot(_) => panic!("expected a Text reply"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ask_at_propagates_api_error_message() {
+        let (server, client) = mock_server().await;
+        let body = json!({ "error": { "message": "overloaded_error: try again later" } });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(529).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let err = ask_at(&client, &url, "test-key", &history())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("overloaded_error"));
+    }
 }
