@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- Replaced the Tauri/JavaScript frontend with a PySide6 (Qt) desktop app. Plots are interactive
+  matplotlib figures (2D zoom/pan, 3D rotation) and expressions are evaluated with numpy.
+- The backend is ported from Rust to Python. Existing `config.json` and `library.json` files keep
+  working unchanged. Plotly and mathjs are no longer used.
+
 ### Features
 
 - Function library: every plot now comes with a Title, a LaTeX-rendered Subtitle, and a
