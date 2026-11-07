@@ -180,6 +180,20 @@ button:disabled {
   line-height: 1.4;
 }
 
+#add-function-btn {
+  background: transparent;
+  border: 1px solid #333;
+  color: #e6e6e6;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  margin: 0 0 8px;
+}
+
+#add-function-btn.active {
+  background: #5c6bc0;
+  border-color: #5c6bc0;
+}
+
 #topic-bar {
   display: flex;
   align-items: center;

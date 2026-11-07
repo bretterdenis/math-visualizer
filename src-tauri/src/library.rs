@@ -15,6 +15,8 @@ pub struct FunctionEntry {
     pub domain: Value,
     pub traces: Value,
     pub created_at: String,
+    #[serde(default)]
+    pub combined: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -26,6 +28,8 @@ pub struct Topic {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Library {
     pub topics: Vec<Topic>,
+    #[serde(default)]
+    pub combined: Vec<FunctionEntry>,
 }
 
 /// The real on-disk location for the library file (`~/.config/math-visualizer/library.json`
@@ -100,12 +104,16 @@ pub fn save_function(
     if entry.created_at.trim().is_empty() {
         entry.created_at = now_iso8601();
     }
-    match find_topic_mut(library, &topic) {
-        Some(t) => t.functions.push(entry),
-        None => library.topics.push(Topic {
-            name: topic,
-            functions: vec![entry],
-        }),
+    if entry.combined {
+        library.combined.push(entry);
+    } else {
+        match find_topic_mut(library, &topic) {
+            Some(t) => t.functions.push(entry),
+            None => library.topics.push(Topic {
+                name: topic,
+                functions: vec![entry],
+            }),
+        }
     }
     save_library_to(library, path)
 }
@@ -146,6 +154,11 @@ pub fn delete_function(
         if topic.functions.len() != before {
             removed = true;
         }
+    }
+    let before = library.combined.len();
+    library.combined.retain(|f| f.id != id);
+    if library.combined.len() != before {
+        removed = true;
     }
     if !removed {
         return Err(format!("Function '{}' not found", id));
@@ -212,7 +225,60 @@ mod tests {
             domain: serde_json::json!({ "xMin": -10, "xMax": 10 }),
             traces: serde_json::json!([{ "expr": "x" }]),
             created_at: String::new(),
+            combined: false,
         }
+    }
+
+    #[test]
+    fn function_entry_without_combined_field_defaults_to_false() {
+        let json = r#"{
+            "id": "1", "title": "T", "subtitle": "", "description": "", "kind": "2d",
+            "variables": ["x"], "domain": {}, "traces": [], "created_at": ""
+        }"#;
+        let entry: FunctionEntry = serde_json::from_str(json).unwrap();
+        assert!(!entry.combined);
+    }
+
+    #[test]
+    fn library_without_combined_key_loads_with_empty_combined() {
+        let tmp = TempLibraryPath::new();
+        fs::create_dir_all(tmp.path().parent().unwrap()).unwrap();
+        fs::write(tmp.path(), r#"{"topics": [{"name": "A", "functions": []}]}"#).unwrap();
+        let lib = load_library_from(tmp.path());
+        assert_eq!(lib.topics.len(), 1);
+        assert!(lib.combined.is_empty());
+    }
+
+    #[test]
+    fn combined_flag_round_trips_through_disk() {
+        let tmp = TempLibraryPath::new();
+        let mut lib = Library::default();
+        let mut combo = sample_entry("c1", "Combo");
+        combo.combined = true;
+        save_function(&mut lib, String::new(), combo, tmp.path()).unwrap();
+        save_function(&mut lib, "A".to_string(), sample_entry("t1", "Plain"), tmp.path()).unwrap();
+
+        let reloaded = load_library_from(tmp.path());
+        assert_eq!(reloaded.combined.len(), 1);
+        assert!(reloaded.combined[0].combined);
+        assert_eq!(reloaded.combined[0].id, "c1");
+        assert_eq!(reloaded.topics.len(), 1);
+        assert_eq!(reloaded.topics[0].functions.len(), 1);
+        assert!(!reloaded.topics[0].functions[0].combined);
+    }
+
+    #[test]
+    fn delete_function_removes_combined_entry() {
+        let tmp = TempLibraryPath::new();
+        let mut lib = Library::default();
+        let mut combo = sample_entry("c1", "Combo");
+        combo.combined = true;
+        save_function(&mut lib, String::new(), combo, tmp.path()).unwrap();
+
+        delete_function(&mut lib, "c1".to_string(), tmp.path()).unwrap();
+
+        assert!(lib.combined.is_empty());
+        assert!(load_library_from(tmp.path()).combined.is_empty());
     }
 
     #[test]
