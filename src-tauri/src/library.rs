@@ -65,12 +65,6 @@ pub fn load_library() -> Library {
     load_library_from(&path)
 }
 
-/// Saves `library` to the real default path.
-pub fn save_library(library: &Library) -> Result<(), String> {
-    let path = default_library_path().ok_or("Could not resolve config directory")?;
-    save_library_to(library, &path)
-}
-
 pub fn generate_id() -> String {
     let timestamp_millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
