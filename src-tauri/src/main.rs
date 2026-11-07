@@ -134,7 +134,22 @@ async fn ask_claude(state: State<'_, AppState>, prompt: String) -> Result<serde_
 
 #[tauri::command]
 fn list_topics(state: State<AppState>) -> Vec<Topic> {
-    state.library.lock().unwrap().topics.clone()
+    state
+        .library
+        .lock()
+        .unwrap()
+        .topics
+        .iter()
+        .map(|t| Topic {
+            name: t.name.clone(),
+            functions: t.functions.iter().filter(|f| !f.combined).cloned().collect(),
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn list_combined(state: State<AppState>) -> Vec<FunctionEntry> {
+    state.library.lock().unwrap().combined.clone()
 }
 
 fn library_path_or_err() -> Result<PathBuf, String> {
@@ -186,6 +201,7 @@ fn main() {
             reset_conversation,
             ask_claude,
             list_topics,
+            list_combined,
             save_function,
             move_function,
             delete_function,

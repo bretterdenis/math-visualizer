@@ -57,6 +57,7 @@ mod helpers {
             domain: serde_json::json!({ "xMin": -10, "xMax": 10 }),
             traces: serde_json::json!([{ "expr": "x" }]),
             created_at: String::new(),
+            combined: false,
         }
     }
 }
