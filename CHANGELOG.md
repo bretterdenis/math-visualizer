@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Function library: every plot now comes with a Title, a LaTeX-rendered Subtitle, and a
+  click-to-reveal Description (which itself may contain inline LaTeX). Both are typeset with
+  KaTeX.
+- Topic-grouped persistence: Claude suggests a topic for each plotted function; the suggestion is
+  shown in an editable field under the plot, and nothing is saved until the user clicks "Save to
+  library" (hybrid suggest-then-confirm flow — no silent auto-save).
+- Sidebar Library panel: lists saved functions grouped by topic, with each entry showing its
+  Title and rendered Subtitle. Clicking a saved function re-renders its plot entirely client-side
+  from its stored spec, with no API round-trip. Functions can be deleted from the library.
+- Library storage is a JSON file at `~/.config/math-visualizer/library.json`, loaded once at
+  startup and written back on every change.
+
+### Testing
+
+- Rust unit tests for `library.rs` (save/move/delete/rename, load/save round-trip, missing and
+  corrupt file handling) and for `claude::ask`'s response parsing, the latter against a mocked
+  Anthropic API via `wiremock` (new dev-dependency) instead of the real network.
+- `load_library`/`save_library` now take a path parameter (`load_library_from`/
+  `save_library_to`), with `default_library_path()` + `load_library()`/`save_library()` as thin
+  wrappers around the real config path, so library logic is unit-testable without touching the
+  user's real `library.json`.
+- A Rust integration test (`src-tauri/tests/library_roundtrip.rs`) exercises a full save/move/
+  rename/delete/reload sequence against a real temp-file-backed library.
+- `src/plot-math.js` extracts the pure `linspace`/`safeEval` helpers out of `main.js` into a
+  real ES module, loaded by `index.html` via `<script type="module">`; `tests/unit/plot-math.test.js`
+  covers them with Node's built-in test runner (`npm run test:unit`).
+
 ## v0.1.0 — First release
 
 Initial version of Math Visualizer: a native Linux desktop app (Tauri + Rust) that turns a

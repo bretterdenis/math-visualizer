@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod claude;
+mod library;
 
 use claude::{ChatMessage, ClaudeReply};
+use library::{FunctionEntry, Library, Topic};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
@@ -14,6 +16,7 @@ struct AppState {
     client: reqwest::Client,
     api_key: Mutex<Option<String>>,
     history: Mutex<Vec<ChatMessage>>,
+    library: Mutex<Library>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -129,6 +132,43 @@ async fn ask_claude(state: State<'_, AppState>, prompt: String) -> Result<serde_
     }
 }
 
+#[tauri::command]
+fn list_topics(state: State<AppState>) -> Vec<Topic> {
+    state.library.lock().unwrap().topics.clone()
+}
+
+fn library_path_or_err() -> Result<PathBuf, String> {
+    library::default_library_path().ok_or_else(|| "Could not resolve config directory".to_string())
+}
+
+#[tauri::command]
+fn save_function(state: State<AppState>, topic: String, entry: FunctionEntry) -> Result<(), String> {
+    let path = library_path_or_err()?;
+    let mut lib = state.library.lock().unwrap();
+    library::save_function(&mut lib, topic, entry, &path)
+}
+
+#[tauri::command]
+fn move_function(state: State<AppState>, id: String, new_topic: String) -> Result<(), String> {
+    let path = library_path_or_err()?;
+    let mut lib = state.library.lock().unwrap();
+    library::move_function(&mut lib, id, new_topic, &path)
+}
+
+#[tauri::command]
+fn delete_function(state: State<AppState>, id: String) -> Result<(), String> {
+    let path = library_path_or_err()?;
+    let mut lib = state.library.lock().unwrap();
+    library::delete_function(&mut lib, id, &path)
+}
+
+#[tauri::command]
+fn rename_topic(state: State<AppState>, old_name: String, new_name: String) -> Result<(), String> {
+    let path = library_path_or_err()?;
+    let mut lib = state.library.lock().unwrap();
+    library::rename_topic(&mut lib, old_name, new_name, &path)
+}
+
 fn main() {
     let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env");
     let _ = dotenvy::from_path(env_path);
@@ -138,12 +178,18 @@ fn main() {
             client: reqwest::Client::new(),
             api_key: Mutex::new(load_api_key()),
             history: Mutex::new(Vec::new()),
+            library: Mutex::new(library::load_library()),
         })
         .invoke_handler(tauri::generate_handler![
             has_api_key,
             set_api_key,
             reset_conversation,
-            ask_claude
+            ask_claude,
+            list_topics,
+            save_function,
+            move_function,
+            delete_function,
+            rename_topic
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

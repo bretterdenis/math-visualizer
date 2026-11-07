@@ -30,7 +30,19 @@ fn plot_tool_definition() -> Value {
                 },
                 "title": {
                     "type": "string",
-                    "description": "Short plot title, e.g. the function itself"
+                    "description": "Short label for what the function is or resembles, e.g. 'Cubic function'"
+                },
+                "subtitle": {
+                    "type": "string",
+                    "description": "The function written as valid LaTeX, e.g. 'f(x) = x^3 - 3x'"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Longer explanatory text about the function; may contain inline LaTeX using \\(...\\) or $...$ delimiters"
+                },
+                "suggested_topic": {
+                    "type": "string",
+                    "description": "Best-guess category name for organizing this function in the user's library, e.g. 'Polynomial functions'. This is only a suggestion the user can override."
                 },
                 "variables": {
                     "type": "array",
@@ -64,7 +76,7 @@ fn plot_tool_definition() -> Value {
                     "description": "One or more functions to overlay (2d) or a single surface (3d)"
                 }
             },
-            "required": ["kind", "variables", "domain", "traces"]
+            "required": ["kind", "title", "subtitle", "description", "suggested_topic", "variables", "domain", "traces"]
         }
     })
 }
@@ -83,11 +95,28 @@ fn system_prompt() -> &'static str {
     (e.g. a circle x^2+y^2=r^2, or an ellipse) must be split into separate traces for each \
     branch (e.g. 'sqrt(r^2-x^2)' and '-sqrt(r^2-x^2)' with the domain limited to [-r, r]) so \
     the full curve is covered. The x and y axes are rendered with equal scale by default, so \
-    shapes like circles will appear geometrically correct."
+    shapes like circles will appear geometrically correct. \
+    Every render_plot call must also include: title (a short label for what the function is or \
+    resembles), subtitle (the function written as valid LaTeX), description (longer explanatory \
+    text, which may use inline LaTeX with \\(...\\) or $...$ delimiters), and suggested_topic \
+    (your best-guess category name for organizing this function, e.g. 'Polynomial functions'). \
+    The user can edit or override suggested_topic before saving it to their library, so treat it \
+    as a helpful guess rather than a final answer."
 }
 
 pub async fn ask(
     client: &reqwest::Client,
+    api_key: &str,
+    history: &[ChatMessage],
+) -> Result<ClaudeReply, String> {
+    ask_at(client, API_URL, api_key, history).await
+}
+
+/// Same as [`ask`] but against an arbitrary API URL — lets tests point at a mock server
+/// instead of the real Anthropic API.
+pub async fn ask_at(
+    client: &reqwest::Client,
+    api_url: &str,
     api_key: &str,
     history: &[ChatMessage],
 ) -> Result<ClaudeReply, String> {
@@ -100,7 +129,7 @@ pub async fn ask(
     });
 
     let resp = client
-        .post(API_URL)
+        .post(api_url)
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
@@ -150,4 +179,127 @@ pub async fn ask(
     } else {
         text
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// Spins up a mock Anthropic API server and returns it together with a plain
+    /// `reqwest::Client`. Point `ask_at` (or any future test) at `server.uri()`. Reused by any
+    /// future test that needs to mock the Claude API — just call this, register a `Mock` on
+    /// the returned server, and call `ask_at`.
+    async fn mock_server() -> (MockServer, reqwest::Client) {
+        let server = MockServer::start().await;
+        (server, reqwest::Client::new())
+    }
+
+    fn history() -> Vec<ChatMessage> {
+        vec![ChatMessage {
+            role: "user".to_string(),
+            content: json!("plot sin(x)"),
+        }]
+    }
+
+    #[tokio::test]
+    async fn ask_at_parses_tool_use_block_as_plot() {
+        let (server, client) = mock_server().await;
+        let body = json!({
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "render_plot",
+                    "input": {
+                        "kind": "2d",
+                        "title": "Sine",
+                        "subtitle": "f(x) = \\sin(x)",
+                        "description": "A sine wave.",
+                        "suggested_topic": "Trigonometric functions",
+                        "variables": ["x"],
+                        "domain": { "xMin": -10, "xMax": 10 },
+                        "traces": [{ "expr": "sin(x)" }]
+                    }
+                }
+            ]
+        });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let reply = ask_at(&client, &url, "test-key", &history()).await.unwrap();
+
+        match reply {
+            ClaudeReply::Plot(data) => {
+                assert_eq!(data["title"], "Sine");
+                assert_eq!(data["suggested_topic"], "Trigonometric functions");
+            }
+            ClaudeReply::Text(_) => panic!("expected a Plot reply"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ask_at_parses_plain_text_block_as_text() {
+        let (server, client) = mock_server().await;
+        let body = json!({
+            "content": [
+                { "type": "text", "text": "What function would you like to plot?" }
+            ]
+        });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let reply = ask_at(&client, &url, "test-key", &history()).await.unwrap();
+
+        match reply {
+            ClaudeReply::Text(text) => assert_eq!(text, "What function would you like to plot?"),
+            ClaudeReply::Plot(_) => panic!("expected a Text reply"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ask_at_empty_text_falls_back_to_placeholder() {
+        let (server, client) = mock_server().await;
+        let body = json!({ "content": [] });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let reply = ask_at(&client, &url, "test-key", &history()).await.unwrap();
+
+        match reply {
+            ClaudeReply::Text(text) => assert_eq!(text, "(no response)"),
+            ClaudeReply::Plot(_) => panic!("expected a Text reply"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ask_at_propagates_api_error_message() {
+        let (server, client) = mock_server().await;
+        let body = json!({ "error": { "message": "overloaded_error: try again later" } });
+        Mock::given(method("POST"))
+            .and(path("/v1/messages"))
+            .respond_with(ResponseTemplate::new(529).set_body_json(&body))
+            .mount(&server)
+            .await;
+
+        let url = format!("{}/v1/messages", server.uri());
+        let err = ask_at(&client, &url, "test-key", &history())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("overloaded_error"));
+    }
 }
