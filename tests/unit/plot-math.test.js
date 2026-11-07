@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { create, all } from "mathjs";
 import { linspace, safeEval } from "../../src/plot-math.js";
