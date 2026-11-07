@@ -1,4 +1,4 @@
-"""Chat column: message log, prompt input, Plot and New conversation controls."""
+"""Chat column: the History log, prompt input, Plot and New conversation controls."""
 
 from __future__ import annotations
 
@@ -18,11 +18,21 @@ from PySide6.QtWidgets import (
 DEFAULT_PLACEHOLDER = "e.g. plot sin(x) * x from -10 to 10"
 ADD_PLACEHOLDER = "Describe the function to add to this plot…"
 
-_BUBBLE_STYLES = {
-    "user": "background-color:#2d3250; margin:4px 0px 4px 40px;",
-    "assistant": "background-color:#24252f; margin:4px 40px 4px 0px;",
-    "error": "background-color:#3b2330; color:#f7768e; margin:4px 40px 4px 0px;",
+_MESSAGE_STYLES = {
+    "user": "",
+    "assistant": "",
+    "error": "color:#f7768e;",
 }
+_MESSAGE_BLOCK = '<div style="margin:0px 0px 14px 0px;">{label}<div style="{style}">{body}</div></div>'
+_USER_LABEL = '<div style="color:#7aa2f7; font-weight:600; font-size:12px; margin:0px 0px 2px 0px;">You</div>'
+
+
+def format_message_html(role: str, text: str) -> str:
+    """Returns one history entry: no background, the body escaped, a label only for the user."""
+    label = _USER_LABEL if role == "user" else ""
+    style = _MESSAGE_STYLES.get(role, _MESSAGE_STYLES["assistant"])
+    body = html.escape(text).replace("\n", "<br>")
+    return _MESSAGE_BLOCK.format(label=label, style=style, body=body)
 
 
 class ChatPanel(QWidget):
@@ -31,6 +41,9 @@ class ChatPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+
+        self.history_label = QLabel("History")
+        self.history_label.setStyleSheet("font-size:13px; font-weight:600; color:#9aa5ce;")
 
         self.log = QTextBrowser()
         self.log.setOpenExternalLinks(False)
@@ -56,6 +69,7 @@ class ChatPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.history_label)
         layout.addWidget(self.log, 1)
         layout.addWidget(self.status)
         layout.addLayout(prompt_row)
@@ -64,9 +78,7 @@ class ChatPanel(QWidget):
     # ------------------------------------------------------------ public API
 
     def add_message(self, role: str, text: str) -> None:
-        style = _BUBBLE_STYLES.get(role, _BUBBLE_STYLES["assistant"])
-        body = html.escape(text).replace("\n", "<br>")
-        self.log.append(f'<div style="{style} padding:6px;">{body}</div>')
+        self.log.append(format_message_html(role, text))
         scrollbar = self.log.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 

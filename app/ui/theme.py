@@ -19,6 +19,11 @@ QTextBrowser, QLineEdit {
     padding: 4px;
     color: #e6e6e6;
 }
+QTextBrowser {
+    font-family: "Noto Sans", "DejaVu Sans", sans-serif;
+    font-size: 14px;
+    padding: 8px;
+}
 QPushButton {
     background-color: #24253a;
     border: 1px solid #2a2b3a;
