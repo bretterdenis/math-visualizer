@@ -6,6 +6,7 @@
 html, body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   background: #1a1b26;
   color: #e6e6e6;
 }
@@ -21,6 +22,8 @@ html, body {
   display: flex;
   flex-direction: column;
   padding: 16px;
+  min-height: 0;
+  overflow-y: auto;
   background: #16161e;
   border-right: 1px solid #2a2b3a;
 }
@@ -32,6 +35,7 @@ html, body {
 
 #log {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -100,6 +104,8 @@ button:disabled {
   display: flex;
   flex-direction: column;
   padding: 16px;
+  min-height: 0;
+  overflow: auto;
 }
 
 #plot {
