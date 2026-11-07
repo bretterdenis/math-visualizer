@@ -1,5 +1,5 @@
 import { linspace, safeEval } from "./plot-math.js";
-import { combineSpecs } from "./combine.js";
+import { canCombine, combineSpecs } from "./combine.js";
 
 const { invoke } = window.__TAURI__.core;
 
@@ -52,6 +52,8 @@ function setBusy(busy) {
   formEl.querySelector("button").disabled = busy;
 }
 
+const SURFACE_COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#59a14f", "#b07aa1", "#76b7b2"];
+
 function renderPlot(spec) {
   const vars = spec.variables || ["x"];
   const domain = spec.domain || {};
@@ -64,23 +66,25 @@ function renderPlot(spec) {
     const steps = 80;
     const xs = linspace(xMin, xMax, steps);
     const ys = linspace(yMin, yMax, steps);
-    const trace = spec.traces?.[0] ?? { expr: "0" };
-    const zs = ys.map((yv) =>
-      xs.map((xv) => safeEval(trace.expr, { [vars[0] || "x"]: xv, [vars[1] || "y"]: yv }))
-    );
+    const traces = spec.traces?.length ? spec.traces : [{ expr: "0" }];
+    const surfaces = traces.map((trace, i) => {
+      const color = SURFACE_COLORS[i % SURFACE_COLORS.length];
+      return {
+        type: "surface",
+        name: trace.label || trace.expr,
+        x: xs,
+        y: ys,
+        z: ys.map((yv) =>
+          xs.map((xv) => safeEval(trace.expr, { [vars[0] || "x"]: xv, [vars[1] || "y"]: yv }))
+        ),
+        colorscale: [[0, color], [1, color]],
+        showscale: false,
+      };
+    });
 
     Plotly.newPlot(
       plotEl,
-      [
-        {
-          type: "surface",
-          x: xs,
-          y: ys,
-          z: zs,
-          colorscale: "Viridis",
-          showscale: false,
-        },
-      ],
+      surfaces,
       {
         autosize: true,
         margin: { l: 0, r: 0, b: 0, t: 40 },
@@ -135,7 +139,7 @@ function renderMeta(spec) {
     descriptionToggleBtn.classList.add("hidden");
   }
 
-  addFunctionBtn.classList.toggle("hidden", spec.kind === "3d");
+  addFunctionBtn.classList.remove("hidden");
 
   const combined = spec.combined === true;
   topicBarEl.classList.remove("hidden");
@@ -345,8 +349,13 @@ formEl.addEventListener("submit", async (e) => {
     const result = await invoke("ask_claude", { prompt });
     thinking.remove();
     if (result.type === "plot" && combining) {
-      if (result.data.kind === "3d") {
-        addMessage("error", "3D plots can't be combined with other functions.");
+      if (!canCombine(currentSpec, result.data)) {
+        addMessage(
+          "error",
+          result.data.kind === "3d"
+            ? "A 3D function can only be added to a 3D plot."
+            : "A 2D function can only be added to a 2D plot."
+        );
       } else {
         const next = combineSpecs(currentSpec, result.data);
         if (next === currentSpec) {

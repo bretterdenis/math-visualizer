@@ -18,3 +18,15 @@ export function combineSpecs(current, incoming) {
     combined: true,
   };
 }
+
+/**
+ * True when `incoming` can be overlaid on `current`: both must be 2D or both
+ * must be 3D. A missing `kind` counts as 2D.
+ */
+export function canCombine(current, incoming) {
+  return kindOf(current) === kindOf(incoming);
+}
+
+function kindOf(spec) {
+  return spec?.kind === "3d" ? "3d" : "2d";
+}

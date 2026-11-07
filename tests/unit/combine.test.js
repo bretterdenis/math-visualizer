@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { combineSpecs } from "../../src/combine.js";
+import { canCombine, combineSpecs } from "../../src/combine.js";
 
 const sine = {
   title: "Sine",
@@ -61,4 +61,57 @@ test("combining a combined spec keeps accumulating traces", () => {
   assert.equal(twice.traces.length, 3);
   assert.equal(twice.title, "Sine + Cosine + Tan");
   assert.equal(twice.combined, true);
+});
+
+const surface = {
+  title: "Paraboloid",
+  kind: "3d",
+  variables: ["x", "y"],
+  domain: { xMin: -2, xMax: 2 },
+  traces: [{ expr: "x^2 + y^2", label: "paraboloid" }],
+};
+
+const saddle = {
+  title: "Saddle",
+  kind: "3d",
+  variables: ["x", "y"],
+  domain: { xMin: -1, xMax: 1 },
+  traces: [{ expr: "x^2 - y^2", label: "saddle" }],
+};
+
+test("canCombine allows 2D into 2D", () => {
+  assert.equal(canCombine(sine, cosine), true);
+});
+
+test("canCombine allows 3D into 3D", () => {
+  assert.equal(canCombine(surface, saddle), true);
+});
+
+test("canCombine rejects 2D into 3D", () => {
+  assert.equal(canCombine(surface, cosine), false);
+});
+
+test("canCombine rejects 3D into 2D", () => {
+  assert.equal(canCombine(sine, saddle), false);
+});
+
+test("canCombine treats a missing kind as 2D", () => {
+  assert.equal(canCombine({ traces: [] }, sine), true);
+  assert.equal(canCombine(surface, { traces: [] }), false);
+});
+
+test("combineSpecs keeps kind 3d when combining 3D specs", () => {
+  const combined = combineSpecs(surface, saddle);
+  assert.equal(combined.kind, "3d");
+  assert.equal(combined.combined, true);
+});
+
+test("combineSpecs appends the 3D trace to the current traces", () => {
+  const combined = combineSpecs(surface, saddle);
+  assert.deepEqual(combined.traces, [
+    { expr: "x^2 + y^2", label: "paraboloid" },
+    { expr: "x^2 - y^2", label: "saddle" },
+  ]);
+  assert.deepEqual(combined.variables, ["x", "y"]);
+  assert.deepEqual(combined.domain, surface.domain);
 });
