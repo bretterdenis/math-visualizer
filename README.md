@@ -1,59 +1,55 @@
 # Math Visualizer
 
-Native Linux desktop app (Tauri + Rust) for prompting a mathematical function in natural
-language and getting a live 2D/3D plot back.
+Native desktop app (Python + PySide6) for prompting a mathematical function in natural
+language and getting an interactive 2D/3D plot back.
 
 ## How it works
 
 - You type a prompt (e.g. "plot sin(x)*x from -10 to 10", "now overlay cos(x)", "show a 3D
   surface of sin(sqrt(x^2+y^2))").
-- The Rust backend sends the conversation to the Anthropic API (model `claude-sonnet-5-5`)
-  with a forced tool schema (`render_plot`) describing the function(s), domain, and whether
-  it's 2D or 3D.
-- The frontend evaluates the returned expression(s) client-side with `mathjs` and renders them
-  with `Plotly.js`.
+- The backend sends the conversation to the Anthropic API (model `claude-sonnet-5-5`) with a
+  forced tool schema (`render_plot`) describing the function(s), domain, and whether it's 2D or 3D.
+- Expressions are evaluated with numpy on a sampling grid and drawn with matplotlib, embedded in
+  the window. 2D plots support zoom and pan; 3D surfaces can be rotated with the mouse.
 - Conversation history is kept in memory (per app session) so follow-up prompts like "zoom out"
   or "add another curve" work in context. "New conversation" clears it.
+- "+ Add function" appends the next requested function to the current plot (2D with 2D, 3D with 3D).
+- Saved functions live in a library in the sidebar, grouped by topic, plus a "Combined" group.
 
 ## Setup
 
-1. **Rust + Tauri prerequisites** (not installed on this machine yet — install yourself):
-   ```sh
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   # Linux system deps for Tauri (Debian/Ubuntu example):
-   sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-     libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-   ```
-2. **Node deps**:
-   ```sh
-   npm install
-   ```
-3. **API key** — either set the environment variable before launching:
-   ```sh
-   export ANTHROPIC_API_KEY=sk-ant-...
-   ```
-   or just run the app and paste it into the one-time setup dialog; it's saved to
-   `~/.config/math-visualizer/config.json` and reused on future launches. It is only ever sent
-   to `api.anthropic.com`.
-
-## Run (dev)
+Requires Python 3.10+.
 
 ```sh
-npm run tauri dev
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-## Build a native package
+API key: either set `ANTHROPIC_API_KEY` (environment or a repo-root `.env` file), or run the app
+and paste it into the one-time dialog. It is saved to `~/.config/math-visualizer/config.json`
+(same format as the earlier Tauri version) and is only ever sent to `api.anthropic.com`.
+
+The library is stored in `~/.config/math-visualizer/library.json` (also the same format as before).
+
+## Run
 
 ```sh
-npm run tauri build
+python3 -m app.main
 ```
 
-Produces a `.deb` and an AppImage under `src-tauri/target/release/bundle/`.
+## Tests
 
-## Notes / next steps
+```sh
+python3 -m pytest              # or: python3 -m unittest discover -s tests -t .
+```
 
-- No app icon is set up yet; `npm run tauri icon <path-to-1024px-png>` generates one from an
-  image if you want a custom icon before building a release bundle.
-- Conversation history resets on app restart (only persisted for the running session).
-- Expressions are evaluated with `mathjs`'s default (sandboxed) evaluator — no filesystem/network
-  access from expressions, only arithmetic/math functions.
+The Qt smoke test runs offscreen (`QT_QPA_PLATFORM=offscreen`) and is skipped when PySide6 or
+matplotlib are not installed.
+
+## Notes
+
+- Subtitles are typeset with matplotlib's mathtext (a subset of LaTeX); unsupported commands show
+  as plain text. Descriptions are shown as plain text (no LaTeX typesetting yet).
+- Expressions are never passed to Python's `eval`: they are translated from mathjs syntax and
+  evaluated by a small whitelisted evaluator (arithmetic, common math functions and constants).
