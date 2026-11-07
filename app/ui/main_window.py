@@ -45,7 +45,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Math Visualizer")
         if ICON_PATH.exists():
             self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.resize(1280, 800)
+        self.resize(1400, 900)
 
         self.chat = ChatPanel()
         self.library = LibraryPanel()

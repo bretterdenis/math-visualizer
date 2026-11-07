@@ -1,8 +1,9 @@
-"""Plot panel: title, subtitle, description toggle, topic/save bar, and the interactive plot.
+"""Plot panel: compact header (title, formula, buttons), topic/save bar, and the interactive plot.
 
 The matplotlib canvas is embedded with FigureCanvasQTAgg, so 2D zoom/pan and 3D rotation come
-from matplotlib directly (NavigationToolbar2QT provides the toolbar). The panel itself does not
-scroll; only the plot canvas is sized to the available space.
+from matplotlib directly. The navigation toolbar is hidden until the Toolbar button shows it, so
+the plot takes the remaining space. The panel itself does not scroll; only the canvas is sized to
+the available space.
 """
 
 from __future__ import annotations
@@ -54,14 +55,24 @@ class PlotPanel(QWidget):
         self.description_button.clicked.connect(self._toggle_description)
         self._description_text = ""
 
+        self.toolbar_button = QPushButton("Toolbar")
+        self.toolbar_button.setCheckable(True)
+        self.toolbar_button.setToolTip("Show zoom, pan and save controls")
+
         self.description_label = QLabel()
         self.description_label.setWordWrap(True)
         self.description_label.hide()
 
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.add_button)
-        buttons.addWidget(self.description_button)
-        buttons.addStretch(1)
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
+        titles.addWidget(self.title_label)
+        titles.addWidget(self.subtitle_label)
+
+        header = QHBoxLayout()
+        header.addLayout(titles, 1)
+        header.addWidget(self.add_button, 0, Qt.AlignmentFlag.AlignTop)
+        header.addWidget(self.description_button, 0, Qt.AlignmentFlag.AlignTop)
+        header.addWidget(self.toolbar_button, 0, Qt.AlignmentFlag.AlignTop)
 
         self.topic_label = QLabel("Topic:")
         self.topic_input = QLineEdit()
@@ -79,11 +90,12 @@ class PlotPanel(QWidget):
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        self.toolbar.hide()
+        self.toolbar_button.toggled.connect(self.toolbar.setVisible)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.subtitle_label)
-        layout.addLayout(buttons)
+        layout.setSpacing(6)
+        layout.addLayout(header)
         layout.addWidget(self.description_label)
         layout.addWidget(self.topic_bar)
         layout.addWidget(self.toolbar)
@@ -145,6 +157,10 @@ class PlotPanel(QWidget):
     def _draw(self, spec: dict) -> None:
         self.figure.clear()
         self.figure.set_facecolor(BG)
+        # Constrained layout keeps tick labels inside the canvas while letting the axes
+        # use nearly all of it.
+        self.figure.set_layout_engine("constrained")
+        self.figure.get_layout_engine().set(w_pad=0.02, h_pad=0.02)
         x_name, y_name = variable_names(spec)
         if spec.get("kind") == "3d":
             self._draw_3d(spec, x_name, y_name)
@@ -176,6 +192,7 @@ class PlotPanel(QWidget):
         ax.set_xlabel(x_name)
         ax.set_ylabel(y_name)
         ax.set_zlabel("z")
+        ax.set_box_aspect((1, 1, 0.85))
         _style_axes(ax)
         if handles:
             _style_legend(ax.legend(handles=handles, loc="upper left"))

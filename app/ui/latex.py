@@ -12,20 +12,29 @@ from typing import Optional
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QLabel
 
-# matplotlib's PNG output has an opaque white background, so the formula is drawn in dark ink
-# and shows as a light formula card on the dark theme.
-MATH_INK = "#1a1b26"
+# Light ink matching the UI text colour. The PNG has a transparent background (not matplotlib's
+# default white), so the formula sits directly on the dark theme.
+MATH_INK = "#e6e6e6"
 RENDER_DPI = 144
 
 
 def render_latex_pixmap(source: str) -> Optional[QPixmap]:
-    """Typesets ``source`` (LaTeX, without delimiters) as a PNG pixmap, or None on failure."""
+    """Typesets ``source`` (LaTeX, without delimiters) as a transparent PNG pixmap, or None."""
     try:
-        from matplotlib.mathtext import math_to_image
+        from matplotlib.figure import Figure
 
         text = source if "$" in source else f"${source}$"
+        figure = Figure(figsize=(1, 1), dpi=RENDER_DPI, facecolor="none")
+        figure.text(0, 0, text, color=MATH_INK, fontsize=13)
         buffer = io.BytesIO()
-        math_to_image(text, buffer, dpi=RENDER_DPI, format="png", color=MATH_INK)
+        figure.savefig(
+            buffer,
+            format="png",
+            dpi=RENDER_DPI,
+            transparent=True,
+            bbox_inches="tight",
+            pad_inches=0.02,
+        )
         pixmap = QPixmap()
         if not pixmap.loadFromData(buffer.getvalue(), "PNG"):
             return None
