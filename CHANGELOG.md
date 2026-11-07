@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Function library: every plot now comes with a Title, a LaTeX-rendered Subtitle, and a
+  click-to-reveal Description (which itself may contain inline LaTeX). Both are typeset with
+  KaTeX.
+- Topic-grouped persistence: Claude suggests a topic for each plotted function; the suggestion is
+  shown in an editable field under the plot, and nothing is saved until the user clicks "Save to
+  library" (hybrid suggest-then-confirm flow — no silent auto-save).
+- Sidebar Library panel: lists saved functions grouped by topic, with each entry showing its
+  Title and rendered Subtitle. Clicking a saved function re-renders its plot entirely client-side
+  from its stored spec, with no API round-trip. Functions can be deleted from the library.
+- Library storage is a JSON file at `~/.config/math-visualizer/library.json`, loaded once at
+  startup and written back on every change.
+
 ## v0.1.0 — First release
 
 Initial version of Math Visualizer: a native Linux desktop app (Tauri + Rust) that turns a

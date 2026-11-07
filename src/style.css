@@ -98,6 +98,7 @@ button:disabled {
 #plot-panel {
   flex: 1;
   display: flex;
+  flex-direction: column;
   padding: 16px;
 }
 
@@ -144,4 +145,113 @@ button:disabled {
 
 .hidden {
   display: none;
+}
+
+#plot-meta {
+  margin-bottom: 10px;
+}
+
+#plot-title {
+  font-size: 1.2rem;
+  margin: 0 0 4px;
+}
+
+#plot-subtitle {
+  color: #b9bbd4;
+  margin-bottom: 6px;
+}
+
+#description-toggle,
+.section-toggle,
+.library-topic-header {
+  background: transparent;
+  border: 1px solid #333;
+  color: #e6e6e6;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+#plot-description {
+  margin-top: 8px;
+  padding: 10px;
+  background: #0f0f16;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+#topic-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+
+#topic-bar input {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0f0f16;
+  color: #e6e6e6;
+}
+
+#library-panel {
+  margin-top: 12px;
+}
+
+.section-toggle {
+  width: 100%;
+  text-align: left;
+}
+
+#library-list {
+  margin-top: 8px;
+  overflow-y: auto;
+  max-height: 260px;
+}
+
+.library-empty {
+  font-size: 0.85rem;
+  color: #8888a0;
+}
+
+.library-topic {
+  margin-bottom: 6px;
+}
+
+.library-topic-header {
+  width: 100%;
+  text-align: left;
+}
+
+.library-functions {
+  padding-left: 8px;
+}
+
+.library-function {
+  position: relative;
+  padding: 6px 24px 6px 6px;
+  border-bottom: 1px solid #2a2b3a;
+  cursor: pointer;
+}
+
+.library-function-title {
+  font-size: 0.85rem;
+}
+
+.library-function-subtitle {
+  font-size: 0.8rem;
+  color: #b9bbd4;
+}
+
+.library-function-delete {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  background: transparent;
+  border: none;
+  color: #ff9d9d;
+  padding: 2px 6px;
 }

@@ -30,7 +30,19 @@ fn plot_tool_definition() -> Value {
                 },
                 "title": {
                     "type": "string",
-                    "description": "Short plot title, e.g. the function itself"
+                    "description": "Short label for what the function is or resembles, e.g. 'Cubic function'"
+                },
+                "subtitle": {
+                    "type": "string",
+                    "description": "The function written as valid LaTeX, e.g. 'f(x) = x^3 - 3x'"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Longer explanatory text about the function; may contain inline LaTeX using \\(...\\) or $...$ delimiters"
+                },
+                "suggested_topic": {
+                    "type": "string",
+                    "description": "Best-guess category name for organizing this function in the user's library, e.g. 'Polynomial functions'. This is only a suggestion the user can override."
                 },
                 "variables": {
                     "type": "array",
@@ -64,7 +76,7 @@ fn plot_tool_definition() -> Value {
                     "description": "One or more functions to overlay (2d) or a single surface (3d)"
                 }
             },
-            "required": ["kind", "variables", "domain", "traces"]
+            "required": ["kind", "title", "subtitle", "description", "suggested_topic", "variables", "domain", "traces"]
         }
     })
 }
@@ -83,7 +95,13 @@ fn system_prompt() -> &'static str {
     (e.g. a circle x^2+y^2=r^2, or an ellipse) must be split into separate traces for each \
     branch (e.g. 'sqrt(r^2-x^2)' and '-sqrt(r^2-x^2)' with the domain limited to [-r, r]) so \
     the full curve is covered. The x and y axes are rendered with equal scale by default, so \
-    shapes like circles will appear geometrically correct."
+    shapes like circles will appear geometrically correct. \
+    Every render_plot call must also include: title (a short label for what the function is or \
+    resembles), subtitle (the function written as valid LaTeX), description (longer explanatory \
+    text, which may use inline LaTeX with \\(...\\) or $...$ delimiters), and suggested_topic \
+    (your best-guess category name for organizing this function, e.g. 'Polynomial functions'). \
+    The user can edit or override suggested_topic before saving it to their library, so treat it \
+    as a helpful guess rather than a final answer."
 }
 
 pub async fn ask(
