@@ -3,3 +3,7 @@ src-tauri/target/
 dist/
 .env
 .mcp.json
+.agents/
+skills-lock.json
+.claude/skills/grill-me
+.claude/skills/grilling
