@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.backend.plot_eval import compute_2d, compute_3d, variable_names
+from app.backend.plot_eval import compute_2d, compute_3d, sample_view_2d, variable_names
 from app.ui.latex import set_latex_or_text
 
 BG = "#1a1b26"
@@ -86,6 +86,10 @@ class PlotPanel(QWidget):
         topic_row.addWidget(self.topic_input, 1)
         topic_row.addWidget(self.save_button)
 
+        self._spec_2d: dict | None = None
+        self._curve_lines: list = []
+        self._last_view: list[float] | None = None
+        self._resampling = False
         self.figure = Figure(figsize=(6, 5))
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -116,6 +120,9 @@ class PlotPanel(QWidget):
         self.add_button.setChecked(False)
         self.topic_bar.hide()
         self.figure.clear()
+        self._spec_2d = None
+        self._curve_lines = []
+        self._last_view = None
         self.canvas.draw_idle()
 
     def show_spec(self, spec: dict) -> None:
@@ -156,6 +163,9 @@ class PlotPanel(QWidget):
 
     def _draw(self, spec: dict) -> None:
         self.figure.clear()
+        self._spec_2d = None
+        self._curve_lines = []
+        self._last_view = None
         self.figure.set_facecolor(BG)
         # Constrained layout keeps tick labels inside the canvas while letting the axes
         # use nearly all of it.
@@ -171,8 +181,9 @@ class PlotPanel(QWidget):
     def _draw_2d(self, spec: dict, x_name: str) -> None:
         data = compute_2d(spec)
         ax = self.figure.add_subplot(111)
-        for curve in data.curves:
-            ax.plot(data.xs, curve.ys, label=curve.label or None)
+        self._curve_lines = [
+            ax.plot(data.xs, curve.ys, label=curve.label or None)[0] for curve in data.curves
+        ]
         ax.set_xlabel(x_name)
         ax.set_ylabel("y")
         ax.set_aspect("equal", adjustable="datalim")
@@ -180,6 +191,29 @@ class PlotPanel(QWidget):
         _style_axes(ax)
         if data.curves:
             _style_legend(ax.legend(loc="best"))
+        self._spec_2d = spec
+        ax.callbacks.connect("xlim_changed", self._on_view_changed)
+        ax.callbacks.connect("ylim_changed", self._on_view_changed)
+
+    def _on_view_changed(self, ax) -> None:
+        if self._resampling or self._spec_2d is None:
+            return
+        x_view = tuple(float(v) for v in ax.get_xlim())
+        y_view = tuple(float(v) for v in ax.get_ylim())
+        current = [*x_view, *y_view]
+        # Matplotlib re-applies the equal aspect on every draw, which can emit limit callbacks
+        # with unchanged values; skipping those keeps the redraw from looping.
+        if self._last_view is not None and np.allclose(self._last_view, current, rtol=1e-12, atol=0):
+            return
+        self._last_view = current
+        view = sample_view_2d(self._spec_2d, x_view, y_view)
+        self._resampling = True
+        try:
+            for line, curve in zip(self._curve_lines, view.plot.curves):
+                line.set_data(view.plot.xs, curve.ys)
+        finally:
+            self._resampling = False
+        self.canvas.draw_idle()
 
     def _draw_3d(self, spec: dict, x_name: str, y_name: str) -> None:
         data = compute_3d(spec)

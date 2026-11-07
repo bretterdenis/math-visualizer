@@ -13,7 +13,10 @@ from app.backend.plot_eval import (
     evaluate_on_grid,
     evaluate_scalar,
     linspace,
+    sample_view_2d,
     translate,
+    MAX_ABS_X,
+    MAX_WIDENINGS,
     POINTS_2D,
     POINTS_3D,
     SURFACE_COLORS,
@@ -101,6 +104,44 @@ class EvaluationTests(unittest.TestCase):
     def test_constant_expression_broadcasts(self):
         out = evaluate_on_grid("3", {"x": np.arange(4.0)}, (4,))
         self.assertEqual(list(out), [3.0, 3.0, 3.0, 3.0])
+
+
+class SampleView2DTests(unittest.TestCase):
+    def test_bounded_function_is_sampled_across_visible_range(self):
+        spec = {"variables": ["x"], "traces": [{"expr": "sin(x)"}]}
+        view = sample_view_2d(spec, (-10, 10), (-1.5, 1.5))
+        xs = view.plot.xs
+        self.assertLessEqual(xs[0], -10)
+        self.assertGreaterEqual(xs[-1], 10)
+        self.assertTrue(np.all(np.diff(xs) > 0))
+        self.assertTrue(np.allclose(view.plot.curves[0].ys, np.sin(xs)))
+
+    def test_parabola_widens_until_it_leaves_the_view_top(self):
+        spec = {"variables": ["x"], "traces": [{"expr": "x^2"}]}
+        view = sample_view_2d(spec, (-10, 10), (-50, 5000))
+        self.assertGreater(view.x_range[1], 10)
+        self.assertLess(view.x_range[0], -10)
+        self.assertGreater(np.max(np.abs(view.plot.curves[0].ys)), 1000)
+        self.assertLessEqual(max(view.widenings), MAX_WIDENINGS)
+
+    def test_finite_function_stops_at_cap_with_bounded_iterations(self):
+        spec = {"variables": ["x"], "traces": [{"expr": "atan(x)"}, {"expr": "3"}]}
+        view = sample_view_2d(spec, (-10, 10), (-2, 2))
+        self.assertLessEqual(max(abs(v) for v in view.x_range), MAX_ABS_X)
+        self.assertLessEqual(max(view.widenings), MAX_WIDENINGS)
+        self.assertTrue(np.all(np.isfinite(view.plot.curves[0].ys)))
+
+    def test_constant_does_not_widen(self):
+        spec = {"variables": ["x"], "traces": [{"expr": "3"}]}
+        view = sample_view_2d(spec, (-10, 10), (-50, 50))
+        self.assertEqual(view.widenings, (0, 0))
+
+    def test_invalid_values_are_nan_not_exceptions(self):
+        spec = {"variables": ["x"], "traces": [{"expr": "sqrt(x)"}]}
+        view = sample_view_2d(spec, (-4, 4), (-1, 5))
+        ys = view.plot.curves[0].ys
+        np.testing.assert_array_equal(np.isnan(ys), view.plot.xs < 0)
+        self.assertLessEqual(max(view.widenings), MAX_WIDENINGS)
 
 
 class PlotDataTests(unittest.TestCase):

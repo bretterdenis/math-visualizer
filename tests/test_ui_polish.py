@@ -6,6 +6,8 @@ Skipped automatically when PySide6/matplotlib are absent.
 import os
 import unittest
 
+import numpy as np
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_API", "pyside6")
 
@@ -101,6 +103,32 @@ class PlotLayoutTests(unittest.TestCase):
         self.assertLessEqual(y0, 0.15)
         self.assertGreaterEqual(x0 + width, 0.9)
         self.assertGreaterEqual(y0 + height, 0.9)
+
+    def test_zoom_out_resamples_curve_to_new_edges(self):
+        from unittest import mock
+
+        from app.backend import plot_eval
+
+        square = {**SINE, "traces": [{"expr": "x^2", "label": "x^2"}]}
+        self.panel.show_spec(square)
+        self.panel.canvas.draw()
+        ax = self.panel.figure.axes[0]
+        line = ax.get_lines()[0]
+        with mock.patch(
+            "app.ui.plot_panel.sample_view_2d", wraps=plot_eval.sample_view_2d
+        ) as sampler:
+            ax.set_xlim(-40, 40)
+            ax.set_ylim(-100, 1600)
+            self.panel.canvas.draw()
+            self.app.processEvents()
+        self.assertLessEqual(sampler.call_count, 5)
+        xs = np.asarray(line.get_xdata())
+        ys = np.asarray(line.get_ydata())
+        x_lo, x_hi = ax.get_xlim()
+        self.assertLessEqual(xs[0], x_lo)
+        self.assertGreaterEqual(xs[-1], x_hi)
+        self.assertTrue(np.all(np.diff(xs) > 0))
+        self.assertTrue(np.allclose(ys[np.isfinite(ys)], xs[np.isfinite(ys)] ** 2))
 
 
 if __name__ == "__main__":
