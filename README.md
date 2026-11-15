@@ -38,6 +38,20 @@ The library is stored in `~/.config/math-visualizer/library.json` (also the same
 python3 -m app.main
 ```
 
+## Desktop app (standalone build)
+
+Bundles the app with PyInstaller into a self-contained folder (no venv needed to run it):
+
+```sh
+./packaging/build.sh                    # -> dist/math-visualizer/math-visualizer
+./packaging/install-desktop-entry.sh    # adds "Math Visualizer" to your app menu
+```
+
+The menu entry points at `dist/math-visualizer/`, so rebuild in place to update it. Remove it
+with `./packaging/install-desktop-entry.sh --uninstall`. The built app does not read the
+repo-root `.env`; it uses `ANTHROPIC_API_KEY` from the environment or the saved
+`~/.config/math-visualizer/config.json`.
+
 ## Tests
 
 ```sh
