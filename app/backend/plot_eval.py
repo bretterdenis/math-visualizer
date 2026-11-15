@@ -246,6 +246,105 @@ def compute_2d(spec: dict) -> Plot2D:
     return Plot2D(xs=xs, curves=curves)
 
 
+VIEW_MARGIN = 0.02  # fraction of the visible width added on each side of the view
+EXTENSION_POINTS = 200  # samples per widening step; keeps the off-screen part cheap
+MAX_WIDENINGS = 20  # per side
+MAX_ABS_X = 1e6
+
+
+@dataclass
+class View2D:
+    plot: Plot2D
+    x_range: tuple[float, float]
+    widenings: tuple[int, int]  # (left, right)
+
+
+def _evaluate_all(exprs: list, x_name: str, xs: np.ndarray) -> list[np.ndarray]:
+    return [evaluate_on_grid(expr, {x_name: xs}, xs.shape) for expr in exprs]
+
+
+def _still_leaving(inner: float, edge: float, y_lo: float, y_hi: float) -> bool:
+    """True if the curve, moving outward, is still heading toward the top or bottom of the view."""
+    if not (np.isfinite(inner) and np.isfinite(edge)):
+        return False
+    if edge > inner:
+        return edge < y_hi
+    if edge < inner:
+        return edge > y_lo
+    return False
+
+
+def _grow_side(exprs, x_name, edge, inner_vals, edge_vals, direction, first_step, y_lo, y_hi, max_steps):
+    segments_x: list[np.ndarray] = []
+    segments_y: list[list[np.ndarray]] = []
+    step = first_step
+    while (
+        len(segments_x) < max_steps
+        and abs(edge) < MAX_ABS_X
+        and any(_still_leaving(i, e, y_lo, y_hi) for i, e in zip(inner_vals, edge_vals))
+    ):
+        new_edge = float(np.clip(edge + direction * step, -MAX_ABS_X, MAX_ABS_X))
+        seg = np.linspace(edge, new_edge, EXTENSION_POINTS + 1)[1:]
+        ys = _evaluate_all(exprs, x_name, seg)
+        segments_x.append(seg)
+        segments_y.append(ys)
+        inner_vals = [y[-2] for y in ys]
+        edge_vals = [y[-1] for y in ys]
+        edge = new_edge
+        step *= 2
+    return segments_x, segments_y
+
+
+def sample_view_2d(
+    spec: dict,
+    x_view: tuple[float, float],
+    y_view: tuple[float, float],
+    max_widenings: int = MAX_WIDENINGS,
+) -> View2D:
+    """Samples every 2D trace over the visible x range (plus a margin) for the given view.
+
+    The visible range gets POINTS_2D samples. If a curve is still moving toward the top or
+    bottom of the view at an edge, that side is widened (the distance doubles each step, at
+    most ``max_widenings`` steps, never past MAX_ABS_X) with coarser samples, so the curve
+    keeps going until it leaves the view vertically. The y view is only used for that check.
+    """
+    x_name, _ = variable_names(spec)
+    traces = spec.get("traces") or []
+    exprs = [t.get("expr") for t in traces]
+    labels = [trace_label(t) for t in traces]
+    x_lo, x_hi = sorted(float(v) for v in x_view)
+    y_lo, y_hi = sorted(float(v) for v in y_view)
+    pad = (x_hi - x_lo) * VIEW_MARGIN
+    lo, hi = x_lo - pad, x_hi + pad
+    first_step = max(hi - lo, 1.0)
+
+    xs = linspace(lo, hi, POINTS_2D)
+    ys = _evaluate_all(exprs, x_name, xs)
+    left_x, left_y = _grow_side(
+        exprs, x_name, lo,
+        [y[1] for y in ys], [y[0] for y in ys],
+        -1, first_step, y_lo, y_hi, max_widenings,
+    )
+    right_x, right_y = _grow_side(
+        exprs, x_name, hi,
+        [y[-2] for y in ys], [y[-1] for y in ys],
+        1, first_step, y_lo, y_hi, max_widenings,
+    )
+
+    all_x = np.concatenate([xs, *left_x, *right_x])
+    order = np.argsort(all_x, kind="stable")
+    curves = []
+    for i, label in enumerate(labels):
+        parts = [ys[i], *(seg[i] for seg in left_y), *(seg[i] for seg in right_y)]
+        curves.append(Curve(label, np.concatenate(parts)[order]))
+    sorted_xs = all_x[order]
+    return View2D(
+        plot=Plot2D(xs=sorted_xs, curves=curves),
+        x_range=(float(sorted_xs[0]), float(sorted_xs[-1])),
+        widenings=(len(left_x), len(right_x)),
+    )
+
+
 def compute_3d(spec: dict) -> Plot3D:
     x_name, y_name = variable_names(spec)
     x_min, x_max, y_min, y_max = domain_bounds(spec)
